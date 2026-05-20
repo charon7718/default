@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta http-equiv="X-UA-Compatible" content="ie=edge" />
     <link rel="icon" href="/favicon.ico" type="image/x-icon" />
-    <title>正在为您选择最优节点</title>
+    <title>安全验证</title>
     <style>
       body {
         width: 100%;
@@ -19,6 +19,7 @@
         margin: 0;
         font-family: Arial, sans-serif;
         flex-direction: column;
+        overflow: hidden;
       }
 
       body::before {
@@ -30,6 +31,11 @@
         width: 100%;
         height: 100%;
         z-index: -1;
+      }
+
+      /* ===== 主内容（初始隐藏） ===== */
+      #main-content {
+        display: none; /* 验证通过前隐藏 */
       }
 
       h1 {
@@ -87,12 +93,114 @@
         color: #000;
       }
 
+      /* ===== 滑块验证容器 ===== */
+      #captcha-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 100;
+      }
+
+      .captcha-title {
+        font-size: 1.8rem;
+        margin-bottom: 2rem;
+        font-weight: bold;
+        letter-spacing: 2px;
+      }
+
+      .slider-box {
+        position: relative;
+        width: 300px;
+        height: 45px;
+        background-color: #222;
+        border: 1px solid #444;
+        border-radius: 25px;
+        overflow: hidden;
+        box-shadow: 0 0 10px rgba(255,255,255,0.1);
+      }
+
+      .slider-text {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        text-align: center;
+        line-height: 45px;
+        font-size: 0.95rem;
+        color: #aaa;
+        user-select: none;
+        z-index: 1;
+      }
+
+      .slider-bg {
+        position: absolute;
+        left: 0;
+        top: 0;
+        height: 100%;
+        width: 0;
+        background-color: rgba(255, 255, 255, 0.2);
+        z-index: 2;
+      }
+
+      .slider-block {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 45px;
+        height: 45px;
+        background-color: #fff;
+        border-radius: 50%;
+        cursor: grab;
+        z-index: 3;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 0 10px rgba(0,0,0,0.5);
+        transition: background-color 0.3s;
+      }
+
+      .slider-block:active {
+        cursor: grabbing;
+      }
+
+      .slider-block::before {
+        content: "➔";
+        color: #000;
+        font-size: 1.2rem;
+        font-weight: bold;
+      }
+
+      /* 验证成功样式 */
+      .slider-box.success .slider-text {
+        color: #fff;
+      }
+      .slider-box.success .slider-block {
+        background-color: #4cd964;
+        cursor: default;
+      }
+      .slider-box.success .slider-block::before {
+        content: "✓";
+        color: #fff;
+      }
+
       @media (max-width: 768px) {
         html { font-size: 12px; }
       }
     </style>
   </head>
   <body>
+
+    <!-- ===== 滑块验证拦截层 ===== -->
+    <div id="captcha-container">
+      <div class="captcha-title">请完成安全验证</div>
+      <div class="slider-box" id="sliderBox">
+        <div class="slider-text" id="sliderText">向右滑动滑块验证</div>
+        <div class="slider-bg" id="sliderBg"></div>
+        <div class="slider-block" id="sliderBlock"></div>
+      </div>
+    </div>
+
+    <!-- ===== 原本的主内容 ===== -->
     <div id="main-content">
       <h1>安全检查</h1>
       <div class="text" id="info">
@@ -145,7 +253,13 @@
         };
       }
 
+      // 开始进行节点测速和展现页面
       function startCheck() {
+        // 1. 隐藏验证码，显示测速主页面
+        document.getElementById("captcha-container").style.display = "none";
+        document.getElementById("main-content").style.display = "block";
+
+        // 2. 执行原有的测速逻辑
         nodes.forEach(testNode);
 
         setTimeout(() => {
@@ -154,10 +268,86 @@
           }
         }, timeout);
       }
-
-      window.onload = startCheck;
     </script>
 
+    <!-- ===== 滑块验证交互脚本 (兼容PC与手机端) ===== -->
+    <script type="text/javascript">
+      (function() {
+        const box = document.getElementById('sliderBox');
+        const block = document.getElementById('sliderBlock');
+        const bg = document.getElementById('sliderBg');
+        const text = document.getElementById('sliderText');
+        
+        let isDrag = false;
+        let startX = 0;
+        const maxLeft = box.clientWidth - block.clientWidth; // 最大滑动距离
+
+        // 鼠标/手指按下
+        function dragStart(e) {
+          if(box.classList.contains('success')) return;
+          isDrag = true;
+          startX = (e.clientX || e.touches[0].clientX) - block.offsetLeft;
+        }
+
+        // 鼠标/手指移动
+        function dragMove(e) {
+          if (!isDrag) return;
+          const clientX = e.clientX || e.touches[0].clientX;
+          let moveX = clientX - startX;
+
+          // 边界边界处理
+          if (moveX < 0) moveX = 0;
+          if (moveX > maxLeft) moveX = maxLeft;
+
+          block.style.left = moveX + 'px';
+          bg.style.width = moveX + 'px';
+
+          // 如果滑到最右端，验证成功
+          if (moveX >= maxLeft) {
+            isDrag = false;
+            box.classList.add('success');
+            text.innerText = '验证通过';
+            
+            // 移除所有事件监听
+            removeListeners();
+
+            // 成功后延迟 400ms 进入主页面测速，给用户看一眼“验证通过”的反馈
+            setTimeout(startCheck, 400);
+          }
+        }
+
+        // 鼠标/手指松开
+        function dragEnd() {
+          if (!isDrag) return;
+          isDrag = false;
+          // 未滑到最右端，复位
+          if (!box.classList.contains('success')) {
+            block.style.left = '0px';
+            bg.style.width = '0px';
+          }
+        }
+
+        // 添加事件监听
+        block.addEventListener('mousedown', dragStart);
+        document.addEventListener('mousemove', dragMove);
+        document.addEventListener('mouseup', dragEnd);
+
+        block.addEventListener('touchstart', dragStart);
+        document.addEventListener('touchmove', dragMove);
+        document.addEventListener('touchend', dragEnd);
+
+        function removeListeners() {
+          block.removeEventListener('mousedown', dragStart);
+          document.removeEventListener('mousemove', dragMove);
+          document.removeEventListener('mouseup', dragEnd);
+          block.removeEventListener('touchstart', dragStart);
+          document.removeEventListener('touchmove', dragMove);
+          document.removeEventListener('touchend', dragEnd);
+        }
+      })();
+    </script>
+
+    <!-- ===== 客服系统保持不变 ===== -->
     <script type="text/javascript">
       window.$crisp = [];
       window.CRISP_WEBSITE_ID = "e393e905-2bb0-4eaa-9ac0-d106a026bce2";
