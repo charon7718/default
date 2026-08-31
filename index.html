@@ -93,7 +93,7 @@
         color: #000;
       }
 
-      /* ===== 滑块验证容器 ===== */
+      /* ===== CAP 验证容器 ===== */
       #captcha-container {
         display: flex;
         flex-direction: column;
@@ -109,78 +109,20 @@
         letter-spacing: 2px;
       }
 
-      .slider-box {
-        position: relative;
-        width: 300px;
-        height: 45px;
-        background-color: #222;
-        border: 1px solid #444;
-        border-radius: 25px;
-        overflow: hidden;
-        box-shadow: 0 0 10px rgba(255,255,255,0.1);
-      }
-
-      .slider-text {
-        position: absolute;
-        width: 100%;
-        height: 100%;
-        text-align: center;
-        line-height: 45px;
+      .captcha-tip {
+        margin-top: 1rem;
         font-size: 0.95rem;
         color: #aaa;
-        user-select: none;
-        z-index: 1;
       }
 
-      .slider-bg {
-        position: absolute;
-        left: 0;
-        top: 0;
-        height: 100%;
-        width: 0;
-        background-color: rgba(255, 255, 255, 0.2);
-        z-index: 2;
-      }
-
-      .slider-block {
-        position: absolute;
-        left: 0;
-        top: 0;
-        width: 45px;
-        height: 45px;
-        background-color: #fff;
-        border-radius: 50%;
-        cursor: grab;
-        z-index: 3;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        box-shadow: 0 0 10px rgba(0,0,0,0.5);
-        transition: background-color 0.3s;
-      }
-
-      .slider-block:active {
-        cursor: grabbing;
-      }
-
-      .slider-block::before {
-        content: "➔";
-        color: #000;
-        font-size: 1.2rem;
-        font-weight: bold;
-      }
-
-      /* 验证成功样式 */
-      .slider-box.success .slider-text {
-        color: #fff;
-      }
-      .slider-box.success .slider-block {
-        background-color: #4cd964;
-        cursor: default;
-      }
-      .slider-box.success .slider-block::before {
-        content: "✓";
-        color: #fff;
+      cap-widget {
+        /* 页面是黑色背景，CAP 改成浅色卡片以增强对比 */
+        --cap-background: #ffffff;
+        --cap-border-color: #d9d9d9;
+        --cap-text-color: #111111;
+        --cap-checkbox-background: #f3f3f3;
+        --cap-checkbox-border: #999999;
+        --cap-checkbox-checked-background: #22c55e;
       }
 
       @media (max-width: 768px) {
@@ -190,14 +132,14 @@
   </head>
   <body>
 
-    <!-- ===== 滑块验证拦截层 ===== -->
+    <!-- ===== CAP 验证拦截层 ===== -->
     <div id="captcha-container">
       <div class="captcha-title">请完成安全验证</div>
-      <div class="slider-box" id="sliderBox">
-        <div class="slider-text" id="sliderText">向右滑动滑块验证</div>
-        <div class="slider-bg" id="sliderBg"></div>
-        <div class="slider-block" id="sliderBlock"></div>
-      </div>
+      <cap-widget
+        id="capWidget"
+        data-cap-api-endpoint="https://cap.lei-su.com/f674463fae/"
+      ></cap-widget>
+      <div class="captcha-tip" id="captchaTip">完成验证后将自动选择最优线路</div>
     </div>
 
     <!-- ===== 原本的主内容 ===== -->
@@ -212,6 +154,8 @@
 
       <button id="backup-btn" onclick="goBackup()">手动进入备用网址</button>
     </div>
+
+    <script type="module" src="https://cdn.jsdelivr.net/npm/cap-widget"></script>
 
     <script type="text/javascript">
       // ===== 基础配置 =====
@@ -270,81 +214,25 @@
       }
     </script>
 
-    <!-- ===== 滑块验证交互脚本 (兼容PC与手机端) ===== -->
+    <!-- ===== CAP 验证交互脚本 ===== -->
     <script type="text/javascript">
-      (function() {
-        const box = document.getElementById('sliderBox');
-        const block = document.getElementById('sliderBlock');
-        const bg = document.getElementById('sliderBg');
-        const text = document.getElementById('sliderText');
-        
-        let isDrag = false;
-        let startX = 0;
-        const maxLeft = box.clientWidth - block.clientWidth; // 最大滑动距离
+      window.addEventListener('DOMContentLoaded', function () {
+        const widget = document.getElementById('capWidget');
+        const tip = document.getElementById('captchaTip');
 
-        // 鼠标/手指按下
-        function dragStart(e) {
-          if(box.classList.contains('success')) return;
-          isDrag = true;
-          startX = (e.clientX || e.touches[0].clientX) - block.offsetLeft;
-        }
+        widget.addEventListener('solve', function (e) {
+          tip.innerText = '验证通过，正在选择最优线路…';
+          // e.detail.token 为 CAP 返回的验证 token。
+          // 当前页面仅用于前端拦截；如需真正防机器人，
+          // 应将 token 发送到你的服务端并调用 CAP /siteverify 校验。
+          setTimeout(startCheck, 300);
+        });
 
-        // 鼠标/手指移动
-        function dragMove(e) {
-          if (!isDrag) return;
-          const clientX = e.clientX || e.touches[0].clientX;
-          let moveX = clientX - startX;
-
-          // 边界边界处理
-          if (moveX < 0) moveX = 0;
-          if (moveX > maxLeft) moveX = maxLeft;
-
-          block.style.left = moveX + 'px';
-          bg.style.width = moveX + 'px';
-
-          // 如果滑到最右端，验证成功
-          if (moveX >= maxLeft) {
-            isDrag = false;
-            box.classList.add('success');
-            text.innerText = '验证通过';
-            
-            // 移除所有事件监听
-            removeListeners();
-
-            // 成功后延迟 400ms 进入主页面测速，给用户看一眼“验证通过”的反馈
-            setTimeout(startCheck, 400);
-          }
-        }
-
-        // 鼠标/手指松开
-        function dragEnd() {
-          if (!isDrag) return;
-          isDrag = false;
-          // 未滑到最右端，复位
-          if (!box.classList.contains('success')) {
-            block.style.left = '0px';
-            bg.style.width = '0px';
-          }
-        }
-
-        // 添加事件监听
-        block.addEventListener('mousedown', dragStart);
-        document.addEventListener('mousemove', dragMove);
-        document.addEventListener('mouseup', dragEnd);
-
-        block.addEventListener('touchstart', dragStart);
-        document.addEventListener('touchmove', dragMove);
-        document.addEventListener('touchend', dragEnd);
-
-        function removeListeners() {
-          block.removeEventListener('mousedown', dragStart);
-          document.removeEventListener('mousemove', dragMove);
-          document.removeEventListener('mouseup', dragEnd);
-          block.removeEventListener('touchstart', dragStart);
-          document.removeEventListener('touchmove', dragMove);
-          document.removeEventListener('touchend', dragEnd);
-        }
-      })();
+        widget.addEventListener('error', function (e) {
+          tip.innerText = '验证加载失败，请刷新页面后重试';
+          console.error('CAP error:', e.detail);
+        });
+      });
     </script>
 
     <!-- ===== 客服系统保持不变 ===== -->
